@@ -1,0 +1,3 @@
+private.auto.tfvars
+.terraform/
+*tfstate*

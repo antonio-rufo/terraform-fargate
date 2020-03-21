@@ -12,6 +12,7 @@ terraform {
 
 data "terraform_remote_state" "platform" {
   backend = "s3"
+
   config = {
     bucket = var.remote_state_bucket
     key    = var.remote_state_key
@@ -20,9 +21,9 @@ data "terraform_remote_state" "platform" {
 }
 
 data "template_file" "ecs_task_definition_template" {
-  template = file("task_definition.json")
+  template = "${file("task_definition.json")}"
 
-  vars {
+  vars = {
     task_definition_name  = var.ecs_service_name
     ecs_service_name      = var.ecs_service_name
     docker_image_url      = var.docker_image_url
@@ -34,19 +35,19 @@ data "template_file" "ecs_task_definition_template" {
 }
 
 resource "aws_ecs_task_definition" "springbootapp-task-definition" {
-  container_definitions     = data.template_file.ecs_task_definition_template.rendered
-  family                    = var.ecs_service_name
-  cpu                       = 512
-  memory                    = var.memory
-  requires_compatibilities  = ["FARGATE"]
-  network_mode              = "awsvpc"
-  execution_role_arn        = aws_iam_role.fargate_iam_role.arn
-  task_role_arn             = aws_iam_role.fargate_iam_role.arn
+  container_definitions    = data.template_file.ecs_task_definition_template.rendered
+  family                   = var.ecs_service_name
+  cpu                      = 512
+  memory                   = var.memory
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  execution_role_arn       = aws_iam_role.fargate_iam_role.arn
+  task_role_arn            = aws_iam_role.fargate_iam_role.arn
 }
 
 resource "aws_iam_role" "fargate_iam_role" {
-  name                = "${var.ecs_service_name}-IAM-Role"
-  assume_role_policy  = <<EOF
+  name               = "${var.ecs_service_name}-IAM-Role"
+  assume_role_policy = <<EOF
 {
 "Version": "2012-10-17",
 "Statement": [
@@ -63,10 +64,10 @@ EOF
 }
 
 resource "aws_iam_role_policy" "fargate_iam_role_policy" {
-  name    = "${var.ecs_service_name}-IAM-Role-Policy"
-  role    = aws_iam_role.fargate_iam_role.id
+  name = "${var.ecs_service_name}-IAM-Role-Policy"
+  role = aws_iam_role.fargate_iam_role.id
 
-  policy  = <<EOF
+  policy = <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -106,7 +107,7 @@ resource "aws_security_group" "app_security_group" {
   }
 
   tags = {
-    Name  = "${var.ecs_service_name}-SG"
+    Name = "${var.ecs_service_name}-SG"
   }
 }
 
@@ -140,29 +141,29 @@ resource "aws_ecs_service" "ecs_service" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets           = [data.terraform_remote_state.platform.outputs.ecs_public_subnets]
-    security_groups   = [aws_security_group.app_security_group.id]
-    assign_public_ip  = true
+    subnets          = split(",", join(",", data.terraform_remote_state.platform.outputs.ecs_public_subnets))
+    security_groups  = [aws_security_group.app_security_group.id]
+    assign_public_ip = true
   }
 
   load_balancer {
-    container_name    = var.ecs_service_name
-    container_port    = var.docker_container_port
-    target_group_arn  = aws_alb_target_group.ecs_app_target_group.arn
+    container_name   = var.ecs_service_name
+    container_port   = var.docker_container_port
+    target_group_arn = aws_alb_target_group.ecs_app_target_group.arn
   }
 }
 
 resource "aws_alb_listener_rule" "ecs_alb_listener_rule" {
-  listener_arn  = data.terraform_remote_state.platform.outputs.ecs_alb_listener_arn
+  listener_arn = data.terraform_remote_state.platform.outputs.ecs_alb_listener_arn
 
   action {
-    type              = "forward"
-    target_group_arn  = aws_alb_target_group.ecs_app_target_group.arn
+    type             = "forward"
+    target_group_arn = aws_alb_target_group.ecs_app_target_group.arn
   }
 
   condition {
-    field   = "host-header"
-    values  = ["${lower(var.ecs_service_name)}.${data.terraform_remote_state.platform.outputs.ecs_domain_name}"]
+    field  = "host-header"
+    values = ["${lower(var.ecs_service_name)}.${data.terraform_remote_state.platform.outputs.ecs_domain_name}"]
   }
 }
 
